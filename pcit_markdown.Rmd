@@ -1,0 +1,136 @@
+---
+title: "PCIT"
+author: "Tess Azevedo"
+output:
+   html_document:
+     self_contained: true
+params:  
+  data: "file.csv"
+  nbgenes: 400
+---
+
+```{r data}
+data<- read.table(file.path("../data", params$data))
+```
+
+```{r libraries, warning=FALSE}
+library("PCIT")
+library("reshape2")
+library("dplyr")
+library("igraph")
+library("dplyr")
+library("stringr")
+```
+
+```{r}
+gene_split<-strsplit(rownames(data),"|",1) # we divide  in two parts code and name
+gene_name <- sapply(gene_split,function(x){ifelse(length(x)==1,x,x[2])})  # we test if each element of the list has two parts(code and name) , if yes we keep the name
+gene_name[which(duplicated(gene_name))] <- rownames(data)[which(duplicated(gene_name))]
+rownames(data) <- gene_name
+```
+
+
+
+```{r matrix transposition}
+datat<-t(data)
+```
+
+# Correlation matrix and significant edges with PCIT
+
+```{r correlation matrix}
+cor_data<- cor(datat[,1:as.integer(params$nbgenes)])
+```
+
+```{r save pcit input}
+save(cor_data,file=paste0("pcit_cor_",params$nbgenes,".Rdata"))
+```
+
+```{r pcit memory requirement}
+paste0("Number of matrix rows is ",maxMatrixSize(100,"GB"))
+paste0("Theoretical number of GB required ",pcitMemoryRequirement(as.integer(params$nbgenes),"GB"))
+paste0("Real number of GB required ",pcitMemoryRequirement(cor_data,"GB"))
+```
+
+
+```{r significant edges}
+start.time <- Sys.time()
+signif <- idx(pcit(cor_data)) #index of significant correlations 
+print(length(signif))
+unmeaningful.idx <- idxInvert(nrow(cor_data), signif)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+
+```
+
+
+
+
+
+```{r significant matrix}
+start.time <- Sys.time()
+cor_data_signif <- cor_data
+cor_data_signif [unmeaningful.idx] <- 0
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+```
+
+```{r save signif}
+save(signif,file=paste0("pcit_idx_signif",params$nbgenes,".Rdata"))
+save(cor_data_signif,file=paste0("pcit_cor_signif",params$nbgenes,".Rdata"))
+```
+
+
+
+
+```{r edge matrix}
+edge_matrix <- melt(cor_data_signif) #gedEdgelist aborts R session
+# Graphs with igraph
+colnames(edge_matrix)<-c("Gene1", "Gene2", "Weight")
+edge_matrix <- edge_matrix %>% filter(Weight!=0 & Weight!=1)
+```
+
+# Graphs and connectivity
+
+
+```{r graph construction}
+graph <- graph_from_data_frame(edge_matrix,directed=FALSE)
+```
+
+```{r connectivity}
+start.time <- Sys.time()
+groups_strong <- groups(components(graph,"strong"))
+groups_weak<-groups(components(graph,"weak"))
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+
+```
+
+
+
+# Clusters with louvain method
+
+```{r clusters}
+start.time <- Sys.time()
+clusters <- cluster_louvain(graph)
+sizes(clusters)
+membership(clusters)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+
+
+```
+
+
+
+
+
+
+
+```{r}
+sessionInfo()
+```
+

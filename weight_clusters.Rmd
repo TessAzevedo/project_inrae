@@ -1,0 +1,107 @@
+title: "Weighted clusters"
+author: "Tess Azevedo"
+output:
+   html_document:
+     self_contained: true
+---
+
+```{r libraries, warning=FALSE}
+library("PCIT")
+library("reshape2")
+library("dplyr")
+library("igraph")
+library("dplyr")
+library("stringr")
+library("ggplot2")
+```
+
+
+```{r pcit load matrix}
+load("pcit_cor_signif22463.Rdata")
+load("chicken_genes.Rdata")
+```
+
+
+
+```{r edge matrix}
+edge_matrix <- melt(cor_data_signif) #gedEdgelist aborts R session
+# Graphs with igraph
+colnames(edge_matrix)<-c("Gene1", "Gene2", "Weight")
+
+edge_matrix <- edge_matrix %>% filter(Weight!=0 & Weight!=1)
+```
+
+# Graph
+
+
+```{r graph construction}
+graph <- graph_from_data_frame(edge_matrix,directed=FALSE)
+```
+
+
+
+
+
+# Clusters with louvain method
+
+```{r}
+weight_clusters <- cluster_louvain(graph,weights = abs(edge_matrix[,3]))
+sizes(weight_clusters)
+```
+
+```{r}
+m <- as.matrix(membership(weight_clusters))
+colnames(m)<-c("cluster")
+```
+```{r}
+bind_cluster <- merge(chicken,m, by='row.names', all.x=F, all.y=T)
+rownames(bind_cluster)<-as.character(bind_cluster[,1])
+bind_cluster <- bind_cluster[,-1]
+write.csv(bind_cluster,file="weighted_bind_cluster.csv",row.names = T)
+```
+
+
+
+
+```{r}
+melt_chicken <- melt(as.matrix(bind_cluster))
+colnames(melt_chicken) <- c("Gene","Tissue","Expression")
+```
+
+
+
+```{r}
+tissue_split <- strsplit(colnames(chicken),"_")
+tissue <- sapply(tissue_split,function(x){return (x[1])})
+```
+
+
+```{r}
+bind2 <- bind_cluster
+colnames(bind2) <- c(tissue,"cluster")
+melt_chicken_tissue <-melt(as.matrix(bind2))
+colnames(melt_chicken_tissue) <- c("Gene","Tissue","Expression")
+```
+
+```{r}
+mi_tissue <-melt_chicken_tissue%>% filter(melt_chicken_tissue[,"Tissue"]!="cluster")
+mclus_tissue <-melt_chicken_tissue %>% filter(melt_chicken_tissue[,"Tissue"]=="cluster")
+```
+
+```{r}
+ggplot(data=mi_tissue,aes(x=Tissue,y=log10(Expression+1e-06),fill=Tissue))+facet_wrap(~factor(mclus_tissue$Expression),ncol=3)+  scale_y_continuous(name = "log Expression") +
+scale_x_discrete(labels = NULL, name = "Tissues")+ geom_boxplot()
+
+```
+
+```{r}
+ggplot(data=mi_tissue,aes(x=Tissue,y=log10(Expression+1e-06),fill=Tissue))+facet_wrap(~factor(mclus_tissue$Expression),ncol=3)+  scale_y_continuous(name = "log Expression") +
+scale_x_discrete(labels = NULL, name = "Tissues")+geom_violin() + stat_summary(fun.y=median, geom="point", size=1, color="black")
+
+```
+
+
+
+
+
+

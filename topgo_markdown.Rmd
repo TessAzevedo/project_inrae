@@ -1,0 +1,96 @@
+---
+title: "topgo cluster"
+author: "Tess Azevedo"
+date: '2022-08-31'
+output:
+   html_document:
+     self_contained: true
+params:  
+  data: "file.csv"
+  nbcluster: 9
+---
+
+
+
+```{r  data , warning=FALSE}
+data <- read.table(file.path("../data", params$data))
+load("chicken_clusters.Rdata")
+```
+
+```{r}
+gene_split<-strsplit(rownames(data),"|",1) # we divide  in two parts code and name
+gene_name <- sapply(gene_split,function(x){ifelse(length(x)==1,x,x[2])})  # we test if each element of the list has two parts(code and name) , if yes we keep the name
+gene_name[which(duplicated(gene_name))] <- rownames(data)[which(duplicated(gene_name))]
+rownames(data) <- gene_name
+```
+
+
+```{r libraries, warning=FALSE}
+library("topGO")
+library("org.Gg.eg.db")
+```
+
+```{r}
+m <- as.matrix(correspondance)
+colnames(m)<-c("cluster")
+```
+
+
+```{r}
+bind_cluster <- merge(data,m, by='row.names', all.x=F, all.y=T)
+rownames(bind_cluster)<-as.character(bind_cluster[,1])
+bind_cluster <- bind_cluster[,-1]
+
+```
+
+
+# Creation of Go object 
+
+
+```{r }
+Allnames <- rownames(bind_cluster)
+genesofinterest <- rownames(subset(bind_cluster,cluster==as.integer(params$nbcluster)))
+genelist <- factor(as.integer(Allnames %in% genesofinterest))
+names(genelist) <- Allnames
+str(genelist)
+```
+
+
+
+```{r}
+allGO2genes <- annFUN.org(
+  whichOnto = 'BP',
+  feasibleGenes = NULL,
+  mapping = 'org.Gg.eg.db',
+  ID = 'symbol')
+```
+
+
+
+```{r }
+GOdata <- new("topGOdata",description = "First test",ontology="BP",allGenes=genelist,annot=annFUN.GO2genes, GO2genes = allGO2genes)
+GOdata
+```
+
+
+
+# Running tests 
+
+```{r}
+resultFis <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+resultFis
+resultFis@geneData
+
+```
+
+
+
+
+```{r}
+allRes <- GenTable(GOdata, classicFisher = resultFis,topNodes=100)
+allRes
+```
+    
+```{r}
+showSigOfNodes(GOdata, score(resultFis), firstSigNodes = 15, useInfo = 'all')
+```
